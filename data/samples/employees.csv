@@ -1,0 +1,13 @@
+employee_id,department,region,role,employment_type,hire_date,tenure_years,performance_score,salary
+E-001,Engineering,West,Data Engineer,Full-time,2020-03-16,5.4,4.6,118000
+E-002,Sales,East,Account Executive,Full-time,2022-06-01,3.2,4.1,86000
+E-003,Marketing,North,Content Strategist,Full-time,2021-09-13,3.8,4.4,79000
+E-004,Engineering,South,Backend Engineer,Full-time,2019-11-04,5.9,4.8,124000
+E-005,People,West,Recruiter,Full-time,2023-01-23,2.7,4.0,72000
+E-006,Sales,North,Sales Development Rep,Full-time,2024-02-12,1.3,3.8,65000
+E-007,Finance,East,Financial Analyst,Full-time,2020-08-24,4.8,4.5,92000
+E-008,Engineering,West,Frontend Engineer,Full-time,2022-04-18,3.4,4.2,109000
+E-009,Operations,South,Operations Lead,Full-time,2018-05-07,6.3,4.7,98000
+E-010,Marketing,East,Brand Manager,Part-time,2023-07-10,2.2,3.9,68000
+E-011,Engineering,North,QA Engineer,Full-time,2021-02-15,4.3,4.3,97000
+E-012,Sales,South,Account Executive,Full-time,2020-12-01,4.5,4.6,88000

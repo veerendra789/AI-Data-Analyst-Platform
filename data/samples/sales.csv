@@ -1,0 +1,25 @@
+order_id,date,product,category,region,customer_segment,quantity,price,revenue
+SO-1001,2025-01-05,Wireless Mouse,Accessories,North,SMB,4,24.99,99.96
+SO-1002,2025-01-08,Mechanical Keyboard,Accessories,West,Enterprise,2,89.00,178.00
+SO-1003,2025-01-14,USB-C Hub,Accessories,South,SMB,6,39.50,237.00
+SO-1004,2025-01-21,27in Monitor,Displays,East,Mid-market,3,249.00,747.00
+SO-1005,2025-02-02,Laptop Stand,Office,North,SMB,5,54.00,270.00
+SO-1006,2025-02-11,Webcam,Accessories,West,Enterprise,4,74.50,298.00
+SO-1007,2025-02-18,27in Monitor,Displays,South,Mid-market,2,249.00,498.00
+SO-1008,2025-02-26,Desk Lamp,Office,East,SMB,8,31.25,250.00
+SO-1009,2025-03-03,Mechanical Keyboard,Accessories,North,Enterprise,3,89.00,267.00
+SO-1010,2025-03-12,Wireless Mouse,Accessories,South,SMB,10,24.99,249.90
+SO-1011,2025-03-19,Standing Desk,Office,West,Enterprise,1,499.00,499.00
+SO-1012,2025-03-27,USB-C Hub,Accessories,East,Mid-market,7,39.50,276.50
+SO-1013,2025-04-04,27in Monitor,Displays,North,Enterprise,4,249.00,996.00
+SO-1014,2025-04-10,Webcam,Accessories,South,SMB,6,74.50,447.00
+SO-1015,2025-04-18,Laptop Stand,Office,West,Mid-market,4,54.00,216.00
+SO-1016,2025-04-25,Standing Desk,Office,East,Enterprise,2,499.00,998.00
+SO-1017,2025-05-06,Mechanical Keyboard,Accessories,North,SMB,5,89.00,445.00
+SO-1018,2025-05-15,27in Monitor,Displays,South,Enterprise,3,249.00,747.00
+SO-1019,2025-05-22,Desk Lamp,Office,West,SMB,9,31.25,281.25
+SO-1020,2025-05-30,Wireless Mouse,Accessories,East,Mid-market,12,24.99,299.88
+SO-1021,2025-06-07,USB-C Hub,Accessories,North,SMB,8,39.50,316.00
+SO-1022,2025-06-14,Webcam,Accessories,South,Enterprise,5,74.50,372.50
+SO-1023,2025-06-22,Standing Desk,Office,West,Mid-market,2,499.00,998.00
+SO-1024,2025-06-29,Laptop Stand,Office,East,SMB,6,54.00,324.00
