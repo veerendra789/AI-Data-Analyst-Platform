@@ -17,6 +17,7 @@ Analysts often lose time moving between spreadsheets, SQL editors, notebooks, an
 - Forecasting, observational root-cause analysis, and structured grounded reports
 - Redis caching, rate limiting, asynchronous report jobs, and PostgreSQL persistence
 - Dashboard workspace summary, report history, profile page, loading states, error states, and mobile navigation
+- AI Data Structurer for reviewing and saving cleaned CSV datasets before analysis
 
 ## Phase 1 foundation
 
@@ -230,11 +231,11 @@ Backend: Python 3.12, FastAPI, Pydantic, SQLAlchemy, Alembic, PostgreSQL, Redis,
 
 ## API documentation
 
-With the backend running, FastAPI provides interactive documentation at http://localhost:8000/docs and the OpenAPI schema at http://localhost:8000/openapi.json. Core endpoint groups are Authentication, Datasets, Analysis, and Reports. The health probes are `/health` and `/api/health`.
+With the backend running, FastAPI provides interactive documentation at http://localhost:8000/docs and the OpenAPI schema at http://localhost:8000/openapi.json. Core endpoint groups are Authentication, Datasets, Data Preparation, Analysis, and Reports. The health probes are `/health` and `/api/health`.
 
 ## Screenshots
 
-The primary UI routes are `/login`, `/register`, `/dashboard`, `/datasets`, `/datasets/{id}`, `/datasets/{id}/analyst`, `/reports`, and `/profile`. Run the application locally and capture screenshots from the live workspace for release documentation.
+The primary UI routes are `/login`, `/register`, `/dashboard`, `/datasets`, `/datasets/{id}`, `/data-preparation`, `/datasets/{id}/analyst`, `/reports`, and `/profile`. Run the application locally and capture screenshots from the live workspace for release documentation.
 
 ## Future improvements
 
@@ -265,6 +266,6 @@ Set-Location frontend
 npm run test
 npm run lint
 npm run build
+docker compose config
+docker compose up --build
 ```
-#   A I - D a t a - A n a l y s t - P l a t f o r m  
- 
