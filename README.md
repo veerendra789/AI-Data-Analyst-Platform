@@ -164,6 +164,14 @@ docker compose up --build
 
 Stop services with `docker compose down`. Add `-v` only when you intentionally want to remove the local PostgreSQL volume.
 
+## GitHub Pages frontend deployment
+
+The frontend deploys independently from the backend through `.github/workflows/deploy-frontend.yml` when changes are pushed to `main`, or manually through the GitHub Actions `workflow_dispatch` button. The workflow runs `npm ci`, builds from `frontend/`, copies the Vite entrypoint to `dist/404.html` for React Router fallback handling, and publishes only `frontend/dist` with the official GitHub Pages Actions.
+
+The published custom domain is `https://data-analysis.veerendra.tech/`. The domain is preserved by `frontend/public/CNAME`, and GitHub Pages must be configured with **Source: GitHub Actions** in the repository Pages settings. The Vite base is `/` because this is a custom-domain deployment, not a repository-subpath deployment.
+
+The frontend API client reads `VITE_API_URL`. Local development falls back to `http://localhost:8000`; the GitHub Pages deployment does not provide a backend automatically. Before using authenticated or data-backed features in production, set the repository or `github-pages` environment variable `VITE_API_URL` to the separately deployed HTTPS FastAPI URL. Do not put secrets in the frontend because Vite embeds build-time variables into public assets.
+
 ## Demo data
 
 Three ready-to-upload datasets live in [data/samples](data/samples):
