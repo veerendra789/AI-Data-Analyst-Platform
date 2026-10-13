@@ -131,73 +131,99 @@ alter table public.analyses enable row level security;
 alter table public.reports enable row level security;
 alter table public.structuring_jobs enable row level security;
 
+drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles
   for select to authenticated using (id = (select auth.uid()));
 
+drop policy if exists "datasets_select_own" on public.datasets;
 create policy "datasets_select_own" on public.datasets
   for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "datasets_insert_own" on public.datasets;
 create policy "datasets_insert_own" on public.datasets
   for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "datasets_update_own" on public.datasets;
 create policy "datasets_update_own" on public.datasets
   for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists "datasets_delete_own" on public.datasets;
 create policy "datasets_delete_own" on public.datasets
   for delete to authenticated using (user_id = (select auth.uid()));
 
+drop policy if exists "analyses_select_own" on public.analyses;
 create policy "analyses_select_own" on public.analyses
   for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "analyses_insert_own" on public.analyses;
 create policy "analyses_insert_own" on public.analyses
   for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "analyses_update_own" on public.analyses;
 create policy "analyses_update_own" on public.analyses
   for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists "analyses_delete_own" on public.analyses;
 create policy "analyses_delete_own" on public.analyses
   for delete to authenticated using (user_id = (select auth.uid()));
 
+drop policy if exists "reports_select_own" on public.reports;
 create policy "reports_select_own" on public.reports
   for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "reports_insert_own" on public.reports;
 create policy "reports_insert_own" on public.reports
   for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "reports_update_own" on public.reports;
 create policy "reports_update_own" on public.reports
   for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists "reports_delete_own" on public.reports;
 create policy "reports_delete_own" on public.reports
   for delete to authenticated using (user_id = (select auth.uid()));
 
+drop policy if exists "structuring_jobs_select_own" on public.structuring_jobs;
 create policy "structuring_jobs_select_own" on public.structuring_jobs
   for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "structuring_jobs_insert_own" on public.structuring_jobs;
 create policy "structuring_jobs_insert_own" on public.structuring_jobs
   for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "structuring_jobs_update_own" on public.structuring_jobs;
 create policy "structuring_jobs_update_own" on public.structuring_jobs
   for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists "structuring_jobs_delete_own" on public.structuring_jobs;
 create policy "structuring_jobs_delete_own" on public.structuring_jobs
   for delete to authenticated using (user_id = (select auth.uid()));
 
+drop policy if exists "dataset_objects_select_own" on storage.objects;
 create policy "dataset_objects_select_own" on storage.objects
   for select to authenticated using (
     bucket_id = 'datasets' and (storage.foldername(name))[2] = (select auth.uid())::text
   );
+drop policy if exists "dataset_objects_insert_own" on storage.objects;
 create policy "dataset_objects_insert_own" on storage.objects
   for insert to authenticated with check (
     bucket_id = 'datasets'
     and (storage.foldername(name))[2] = (select auth.uid())::text
     and (metadata ->> 'mimetype') in ('text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain')
   );
+drop policy if exists "dataset_objects_update_own" on storage.objects;
 create policy "dataset_objects_update_own" on storage.objects
   for update to authenticated using (
     bucket_id = 'datasets' and (storage.foldername(name))[2] = (select auth.uid())::text
   ) with check (
     bucket_id = 'datasets' and (storage.foldername(name))[2] = (select auth.uid())::text
   );
+drop policy if exists "dataset_objects_delete_own" on storage.objects;
 create policy "dataset_objects_delete_own" on storage.objects
   for delete to authenticated using (
     bucket_id = 'datasets' and (storage.foldername(name))[2] = (select auth.uid())::text
   );
 
+drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at before update on public.profiles
   for each row execute function public.set_updated_at();
+drop trigger if exists datasets_set_updated_at on public.datasets;
 create trigger datasets_set_updated_at before update on public.datasets
   for each row execute function public.set_updated_at();
+drop trigger if exists analyses_set_updated_at on public.analyses;
 create trigger analyses_set_updated_at before update on public.analyses
   for each row execute function public.set_updated_at();
+drop trigger if exists reports_set_updated_at on public.reports;
 create trigger reports_set_updated_at before update on public.reports
   for each row execute function public.set_updated_at();
+drop trigger if exists structuring_jobs_set_updated_at on public.structuring_jobs;
 create trigger structuring_jobs_set_updated_at before update on public.structuring_jobs
   for each row execute function public.set_updated_at();
