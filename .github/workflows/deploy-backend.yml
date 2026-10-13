@@ -70,14 +70,19 @@ jobs:
             exit 1
           fi
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "### Vercel Backend Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Deployed URL:** \`$deployment_url\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify FastAPI and Supabase health
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
+          echo "Verifying health endpoints on $DEPLOYMENT_URL"
           curl --fail --silent --show-error --retry 10 --retry-delay 5 --retry-connrefused "$DEPLOYMENT_URL/health"
           health="$(curl --fail --silent --show-error --retry 10 --retry-delay 5 --retry-connrefused "$DEPLOYMENT_URL/health/db")"
           printf '%s' "$health" | grep -Fq '"database":"supabase"' || {
             echo "Vercel is up, but Supabase health is not ready. Check Vercel environment variables."
             exit 1
           }
+          echo "- **Health Endpoint:** \`$DEPLOYMENT_URL/health\` (200 OK)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Database Connectivity:** \`$DEPLOYMENT_URL/health/db\` ($health)" >> "$GITHUB_STEP_SUMMARY"
