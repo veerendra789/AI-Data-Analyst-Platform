@@ -45,7 +45,12 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel link --yes --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN"
+        run: |
+          SCOPE_FLAG=""
+          if [ -n "$VERCEL_ORG_ID" ]; then
+            SCOPE_FLAG="--scope $VERCEL_ORG_ID"
+          fi
+          vercel link --yes --project "$VERCEL_PROJECT_ID" $SCOPE_FLAG --token "$VERCEL_TOKEN"
 
       - name: Deploy to Vercel production
         id: deploy
@@ -54,8 +59,12 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
           set -o pipefail
-          vercel deploy --prod --yes --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" 2>&1 | tee deploy.log
-          deployment_url="$(grep -Eo 'https://[^[:space:]]+\.vercel\.app' deploy.log | tail -n 1)"
+          SCOPE_FLAG=""
+          if [ -n "$VERCEL_ORG_ID" ]; then
+            SCOPE_FLAG="--scope $VERCEL_ORG_ID"
+          fi
+          vercel deploy --prod --yes $SCOPE_FLAG --token "$VERCEL_TOKEN" 2>&1 | tee deploy.log
+          deployment_url="$(grep -Eo 'https://[a-zA-Z0-9.-]+\.vercel\.app' deploy.log | tail -n 1)"
           if [ -z "$deployment_url" ]; then
             echo "Vercel did not return a deployment URL."
             exit 1

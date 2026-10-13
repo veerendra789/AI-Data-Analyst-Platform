@@ -86,7 +86,10 @@ async def unexpected_error_handler(_: Request, __: Exception) -> JSONResponse:
     return error_response(500, "The request could not be completed.", "INTERNAL_ERROR")
 
 
+@app.get("/", tags=["system"])
 @app.get("/health", tags=["system"])
+@app.get("/api/index", tags=["system"])
+@app.get("/api/index/health", tags=["system"])
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
