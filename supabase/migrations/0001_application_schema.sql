@@ -131,10 +131,46 @@ alter table public.analyses enable row level security;
 alter table public.reports enable row level security;
 alter table public.structuring_jobs enable row level security;
 
+-- Profiles: Authenticated users can select their own profile and update display_name,
+-- but CANNOT modify role or is_active
+create or replace function public.protect_profile_roles()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (auth.jwt() ->> 'role') = 'authenticated' then
+    if new.role is distinct from old.role then
+      raise exception 'Users cannot modify their own assigned role';
+    end if;
+    if new.is_active is distinct from old.is_active then
+      raise exception 'Users cannot modify their own active status';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_profile_roles_trigger on public.profiles;
+create trigger protect_profile_roles_trigger
+  before update on public.profiles
+  for each row execute function public.protect_profile_roles();
+
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles
   for select to authenticated using (id = (select auth.uid()));
 
+drop policy if exists "profiles_update_own" on public.profiles;
+create policy "profiles_update_own" on public.profiles
+  for update to authenticated
+  using (id = (select auth.uid()))
+  with check (
+    id = (select auth.uid())
+    and role = (select p.role from public.profiles p where p.id = (select auth.uid()))
+  );
+
+-- Datasets
 drop policy if exists "datasets_select_own" on public.datasets;
 create policy "datasets_select_own" on public.datasets
   for select to authenticated using (user_id = (select auth.uid()));
@@ -148,6 +184,7 @@ drop policy if exists "datasets_delete_own" on public.datasets;
 create policy "datasets_delete_own" on public.datasets
   for delete to authenticated using (user_id = (select auth.uid()));
 
+-- Analyses
 drop policy if exists "analyses_select_own" on public.analyses;
 create policy "analyses_select_own" on public.analyses
   for select to authenticated using (user_id = (select auth.uid()));
@@ -161,6 +198,7 @@ drop policy if exists "analyses_delete_own" on public.analyses;
 create policy "analyses_delete_own" on public.analyses
   for delete to authenticated using (user_id = (select auth.uid()));
 
+-- Reports
 drop policy if exists "reports_select_own" on public.reports;
 create policy "reports_select_own" on public.reports
   for select to authenticated using (user_id = (select auth.uid()));
@@ -174,6 +212,7 @@ drop policy if exists "reports_delete_own" on public.reports;
 create policy "reports_delete_own" on public.reports
   for delete to authenticated using (user_id = (select auth.uid()));
 
+-- Structuring Jobs
 drop policy if exists "structuring_jobs_select_own" on public.structuring_jobs;
 create policy "structuring_jobs_select_own" on public.structuring_jobs
   for select to authenticated using (user_id = (select auth.uid()));
@@ -187,31 +226,56 @@ drop policy if exists "structuring_jobs_delete_own" on public.structuring_jobs;
 create policy "structuring_jobs_delete_own" on public.structuring_jobs
   for delete to authenticated using (user_id = (select auth.uid()));
 
+-- Storage Objects: Supports both <user_id>/<dataset_id>/<filename> (folder index 1)
+-- and collection/<user_id>/<dataset_id>/<filename> (folder index 2)
 drop policy if exists "dataset_objects_select_own" on storage.objects;
 create policy "dataset_objects_select_own" on storage.objects
   for select to authenticated using (
-    bucket_id = 'datasets' and (storage.foldername(name))[2] = (select auth.uid())::text
+    bucket_id = 'datasets'
+    and (
+      (storage.foldername(name))[1] = (select auth.uid())::text
+      or (storage.foldername(name))[2] = (select auth.uid())::text
+    )
   );
+
 drop policy if exists "dataset_objects_insert_own" on storage.objects;
 create policy "dataset_objects_insert_own" on storage.objects
   for insert to authenticated with check (
     bucket_id = 'datasets'
-    and (storage.foldername(name))[2] = (select auth.uid())::text
+    and (
+      (storage.foldername(name))[1] = (select auth.uid())::text
+      or (storage.foldername(name))[2] = (select auth.uid())::text
+    )
     and (metadata ->> 'mimetype') in ('text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain')
   );
+
 drop policy if exists "dataset_objects_update_own" on storage.objects;
 create policy "dataset_objects_update_own" on storage.objects
   for update to authenticated using (
-    bucket_id = 'datasets' and (storage.foldername(name))[2] = (select auth.uid())::text
+    bucket_id = 'datasets'
+    and (
+      (storage.foldername(name))[1] = (select auth.uid())::text
+      or (storage.foldername(name))[2] = (select auth.uid())::text
+    )
   ) with check (
-    bucket_id = 'datasets' and (storage.foldername(name))[2] = (select auth.uid())::text
+    bucket_id = 'datasets'
+    and (
+      (storage.foldername(name))[1] = (select auth.uid())::text
+      or (storage.foldername(name))[2] = (select auth.uid())::text
+    )
   );
+
 drop policy if exists "dataset_objects_delete_own" on storage.objects;
 create policy "dataset_objects_delete_own" on storage.objects
   for delete to authenticated using (
-    bucket_id = 'datasets' and (storage.foldername(name))[2] = (select auth.uid())::text
+    bucket_id = 'datasets'
+    and (
+      (storage.foldername(name))[1] = (select auth.uid())::text
+      or (storage.foldername(name))[2] = (select auth.uid())::text
+    )
   );
 
+-- Triggers for automatic updated_at timestamp maintenance
 drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at before update on public.profiles
   for each row execute function public.set_updated_at();
@@ -227,3 +291,9 @@ create trigger reports_set_updated_at before update on public.reports
 drop trigger if exists structuring_jobs_set_updated_at on public.structuring_jobs;
 create trigger structuring_jobs_set_updated_at before update on public.structuring_jobs
   for each row execute function public.set_updated_at();
+
+-- Table grants & security hygiene
+grant usage on schema public to anon, authenticated, service_role;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant all on all tables in schema public to service_role;
+revoke all on all tables in schema public from anon;

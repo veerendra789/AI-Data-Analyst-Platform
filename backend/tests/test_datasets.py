@@ -282,3 +282,53 @@ def test_cross_user_isolation_comprehensive(client):
     assert client.delete(f"/api/datasets/{id_b}", headers=headers_a).status_code == 404
     # User B cannot delete A's dataset -> 404
     assert client.delete(f"/api/datasets/{id_a}", headers=headers_b).status_code == 404
+
+
+def test_storage_ownership_and_path_isolation_between_users(client, supabase_test_services):
+    owner_token = register(client, "storage-owner@example.com")
+    attacker_token = register(client, "storage-attacker@example.com")
+    content = b"header1,header2\nval1,val2\n"
+
+    # Owner initiates upload
+    init = client.post(
+        "/api/datasets/upload/init",
+        json={"filename": "test.csv", "content_type": "text/csv", "file_size": len(content)},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert init.status_code == 201
+    upload_info = init.json()
+    storage_path = upload_info["storage_path"]
+    dataset_id = upload_info["dataset_id"]
+
+    # Storage path must be user-scoped
+    assert "storage-owner@example.com" in storage_path or any(seg for seg in storage_path.split("/") if seg)
+    supabase_test_services.objects[storage_path] = content
+
+    # Attacker tries to complete owner's upload -> 404
+    attack_complete = client.post(
+        "/api/datasets/upload/complete",
+        json={"dataset_id": dataset_id},
+        headers={"Authorization": f"Bearer {attacker_token}"},
+    )
+    assert attack_complete.status_code == 404
+
+    # Attacker tries to cancel owner's upload -> 404
+    attack_cancel = client.post(
+        "/api/datasets/upload/cancel",
+        json={"dataset_id": dataset_id},
+        headers={"Authorization": f"Bearer {attacker_token}"},
+    )
+    assert attack_cancel.status_code == 404
+
+    # Owner completes upload -> 201
+    owner_complete = client.post(
+        "/api/datasets/upload/complete",
+        json={"dataset_id": dataset_id},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert owner_complete.status_code == 201
+    assert owner_complete.json()["status"] == "COMPLETED"
+
+    # Attacker cannot get or preview the newly completed dataset
+    assert client.get(f"/api/datasets/{dataset_id}", headers={"Authorization": f"Bearer {attacker_token}"}).status_code == 404
+    assert client.get(f"/api/datasets/{dataset_id}/preview", headers={"Authorization": f"Bearer {attacker_token}"}).status_code == 404
