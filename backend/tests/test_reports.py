@@ -1,49 +1,25 @@
 import time
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.api.datasets import settings as dataset_settings
-from app.core.database import get_db
 from app.core.redis import clear_memory, make_cache_key, normalize_text
 from app.main import app
-from app.models import Base
 from app.services import job_service
-
-
-ENGINE = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-Session = sessionmaker(bind=ENGINE, autoflush=False, autocommit=False)
+from tests.supabase_test_utils import user_token
 
 
 def register(client: TestClient, email: str) -> str:
-    client.post("/api/auth/register", json={"name": "Report User", "email": email, "password": "correct-horse-battery"})
-    return client.post("/api/auth/login", json={"email": email, "password": "correct-horse-battery"}).json()["access_token"]
+    return user_token(email)
 
 
 def setup_function():
-    Base.metadata.drop_all(ENGINE)
-    Base.metadata.create_all(ENGINE)
     clear_memory()
     dataset_settings.upload_directory = ""
 
 
-def teardown_function():
-    app.dependency_overrides.clear()
-
-
 def client_with_database(tmp_path):
     dataset_settings.upload_directory = str(tmp_path)
-
-    def override_get_db():
-        db = Session()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
     return TestClient(app)
 
 

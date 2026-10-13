@@ -1,44 +1,65 @@
 from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jwt.exceptions import InvalidTokenError
-from sqlalchemy.orm import Session
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.database import get_db
-from app.core.security import decode_access_token, settings
-from app.models import User, UserRole
+from app.core.supabase import InvalidAccessToken, SupabaseUnavailable, verify_access_token
+from app.services.supabase_repository import create_or_update_user
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication is required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return credentials.credentials
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-) -> User:
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> object:
+    token = bearer_token(credentials)
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired authentication token.",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = decode_access_token(token, settings.jwt_secret)
-        subject = payload.get("sub")
-        if not isinstance(subject, str) :
-            raise credentials_error
-        user_id = int(subject)
-    except (InvalidTokenError, ValueError, TypeError, OverflowError):
+        auth_user = verify_access_token(token)
+    except InvalidAccessToken:
         raise credentials_error from None
+    except SupabaseUnavailable:
+        raise HTTPException(status_code=503, detail="Authentication service is unavailable.") from None
 
-    user = db.get(User, user_id)
-    if user is None:
+    user = create_or_update_user(auth_user.uid, auth_user.email, auth_user.name)
+    if not user.is_active:
         raise credentials_error
     return user
 
 
-def require_roles(*roles: UserRole) -> Callable:
-    def role_dependency(current_user: User = Depends(get_current_user)) -> User:
+def get_supabase_identity(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> object:
+    token = bearer_token(credentials)
+    try:
+        return verify_access_token(token)
+    except InvalidAccessToken:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+    except SupabaseUnavailable:
+        raise HTTPException(status_code=503, detail="Authentication service is unavailable.") from None
+
+
+def require_roles(*roles: str) -> Callable:
+    def role_dependency(current_user: object = Depends(get_current_user)) -> object:
         if current_user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

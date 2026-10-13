@@ -16,9 +16,9 @@ describe("ProtectedRoute", () => {
     expect(screen.getByText("Login")).toBeInTheDocument();
   });
 
-  it("allows a stored authenticated session", () => {
+  it("does not trust a stale locally stored user", () => {
     localStorage.setItem("current_user", JSON.stringify({ id: 1, name: "Analyst", email: "analyst@example.com", role: "ANALYST", created_at: "2026-01-01T00:00:00Z" }));
     renderRoute();
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Login")).toBeInTheDocument();
   });
 });

@@ -1,13 +1,22 @@
 import axios from "axios";
+import { supabase } from "../lib/supabase";
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:8000" : undefined);
+
+if (!apiBaseUrl) {
+  throw new Error("VITE_API_URL must be configured for production builds.");
+}
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:8000",
+  baseURL: apiBaseUrl,
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+api.interceptors.request.use(async (config) => {
+  if (supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      config.headers.Authorization = `Bearer ${session.access_token}`;
+    }
   }
   return config;
 });
@@ -16,9 +25,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("current_user");
-      window.dispatchEvent(new Event("auth:logout"));
+      if (supabase) void supabase.auth.signOut();
     }
     return Promise.reject(error);
   },

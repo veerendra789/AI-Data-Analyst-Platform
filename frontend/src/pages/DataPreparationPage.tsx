@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowDownToLine, Check, ChevronDown, FileUp, Home, LoaderCircle, RefreshCw, Save, Sparkles, Trash2, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
+import { uploadCsvThroughStorage } from "../services/supabaseStorageUpload";
 import type { Dataset } from "../types/datasets";
 import type { PreparationComparison, PreparationOperation, PreparationPreview, PreparationSession } from "../types/dataPreparation";
 
@@ -31,13 +32,12 @@ export default function DataPreparationPage() {
     setProgress(0);
     setError("");
     setNotice("");
-    const form = new FormData();
-    form.append("file", file);
     try {
-      const { data } = await api.post<PreparationSession>("/api/data-preparation/analyze", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-        onUploadProgress: (event) => { if (event.total) setProgress(Math.round((event.loaded / event.total) * 100)); },
-      });
+      const data = await uploadCsvThroughStorage<PreparationSession>(
+        "/api/data-preparation/analyze",
+        file,
+        setProgress,
+      );
       setSession(data);
       setPreview(data.preview ?? null);
       setSelectedOperations(data.plan.filter((operation) => operation.selected).map((operation) => operation.id));

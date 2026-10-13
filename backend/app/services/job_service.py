@@ -12,7 +12,7 @@ from app.core.redis import get_json, set_json
 @dataclass
 class Job:
     job_id: str
-    owner_id: int
+    owner_id: str
     status: str = "PENDING"
     result: Any = None
     error: str | None = None
@@ -33,7 +33,7 @@ def _save(job: Job) -> None:
     set_json(_key(job.job_id), {"job_id": job.job_id, "owner_id": job.owner_id, "status": job.status, "result": result, "error": job.error}, ttl_seconds=JOB_TTL_SECONDS)
 
 
-def submit(function: Callable[[], Any], owner_id: int) -> Job:
+def submit(function: Callable[[], Any], owner_id: str) -> Job:
     job = Job(job_id=uuid4().hex, owner_id=owner_id)
     with _lock:
         _jobs[job.job_id] = job
@@ -54,7 +54,7 @@ def submit(function: Callable[[], Any], owner_id: int) -> Job:
     return job
 
 
-def get(job_id: str, owner_id: int) -> Job | None:
+def get(job_id: str, owner_id: str) -> Job | None:
     with _lock:
         job = _jobs.get(job_id)
     if job is None:

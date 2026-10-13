@@ -10,7 +10,7 @@ class ForecastRequest(BaseModel):
 
 
 class ForecastResponse(BaseModel):
-    dataset_id: int
+    dataset_id: str
     date_column: str
     target_column: str
     historical: list[dict[str, Any]]
@@ -27,7 +27,7 @@ class RootCauseRequest(BaseModel):
 
 
 class RootCauseResponse(BaseModel):
-    dataset_id: int
+    dataset_id: str
     question: str
     observed_result: str
     associations: list[dict[str, Any]]

@@ -1,54 +1,103 @@
 import { useEffect, useState, type ReactNode } from "react";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import api from "../services/api";
-import type { AuthResponse, User } from "../types/auth";
-
+import { supabase } from "../lib/supabase";
+import type { User } from "../types/auth";
 import { AuthContext } from "./authContextValue";
 
-function storedUser(): User | null {
-  const value = localStorage.getItem("current_user");
-  if (!value) return null;
-  try {
-    return JSON.parse(value) as User;
-  } catch {
-    localStorage.removeItem("current_user");
-    localStorage.removeItem("access_token");
-    return null;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(storedUser);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const clearSession = () => setUser(null);
-    window.addEventListener("auth:logout", clearSession);
-    return () => window.removeEventListener("auth:logout", clearSession);
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    let authRevision = 0;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        const revision = ++authRevision;
+        if (!session) {
+          if (mounted) {
+            setUser(null);
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        if (mounted) {
+          setIsLoading(true);
+        }
+
+        window.setTimeout(() => {
+          void api.get<User>("/api/auth/me").then(({ data }) => {
+            if (mounted && revision === authRevision) setUser(data);
+          }).catch(() => {
+            if (mounted && revision === authRevision) setUser(null);
+          }).finally(() => {
+            if (mounted && revision === authRevision) setIsLoading(false);
+          });
+        }, 0);
+      },
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const saveSession = (response: AuthResponse) => {
-    localStorage.setItem("access_token", response.access_token);
-    localStorage.setItem("current_user", JSON.stringify(response.user));
-    setUser(response.user);
+  const loadProfile = async (): Promise<void> => {
+    const { data } = await api.get<User>("/api/auth/me");
+    setUser(data);
   };
 
   const login = async (email: string, password: string) => {
-    const { data } = await api.post<AuthResponse>("/api/auth/login", { email, password });
-    saveSession(data);
+    if (!supabase) throw new Error("Supabase is not configured.");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    try {
+      await loadProfile();
+    } catch (error) {
+      await supabase.auth.signOut();
+      throw error;
+    }
   };
 
-  const register = async (name: string, email: string, password: string) => {
-    await api.post("/api/auth/register", { name, email, password });
-    await login(email, password);
+  const register = async (name: string, email: string, password: string): Promise<boolean> => {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: name.trim() } },
+    });
+    if (error) throw error;
+    if (!data.session) return false;
+    try {
+      await loadProfile();
+      return true;
+    } catch (error) {
+      await supabase.auth.signOut();
+      throw error;
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("current_user");
-    setUser(null);
+  const logout = async () => {
+    try {
+      if (supabase) {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+      }
+    } finally {
+      setUser(null);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading: false, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -10,8 +10,8 @@ export default function ProfilePage() {
 
   if (!user) return null;
 
-  const signOut = () => {
-    logout();
+  const signOut = async () => {
+    await logout();
     setSignedOut(true);
     navigate("/login", { replace: true });
   };

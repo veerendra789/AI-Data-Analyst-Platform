@@ -1,7 +1,9 @@
+import axios from "axios";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { BarChart3 } from "lucide-react";
 import { useAuth } from "../context/useAuth";
+import { supabaseAuthErrorMessage } from "../services/supabaseAuthErrors";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -18,8 +20,17 @@ export default function LoginPage() {
     try {
       await login(email, password);
       navigate("/dashboard", { replace: true });
-    } catch {
-      setError("We could not sign you in with those details.");
+    } catch (requestError) {
+      const authMessage = supabaseAuthErrorMessage(requestError, "login");
+      if (authMessage) {
+        setError(authMessage);
+      } else if (axios.isAxiosError(requestError) && !requestError.response) {
+        setError("The sign-in service is unavailable. Please try again shortly.");
+      } else if (axios.isAxiosError(requestError) && requestError.response?.status === 401) {
+        setError("Invalid email or password.");
+      } else {
+        setError("We could not sign you in. Please check your details and try again.");
+      }
     } finally {
       setSubmitting(false);
     }

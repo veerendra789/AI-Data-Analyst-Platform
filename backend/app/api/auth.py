@@ -1,61 +1,44 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user, require_roles
-from app.core.database import get_db
-from app.core.security import create_access_token, hash_password, settings, verify_password
-from app.models import User, UserRole
-from app.schemas.auth import TokenResponse, UserLogin, UserRegister, UserResponse
+from app.schemas.auth import UserResponse
+from app.services.supabase_repository import create_or_update_user
 
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: UserRegister, db: Session = Depends(get_db)) -> User:
-    email = str(payload.email).lower()
-    existing_user = db.scalar(select(User).where(User.email == email))
-    if existing_user is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already registered.")
+class ProfileSyncRequest(BaseModel):
+    displayName: str = Field(default="Analyst", min_length=1, max_length=120)
 
-    user = User(
-        name=payload.name.strip(),
-        email=email,
-        password_hash=hash_password(payload.password),
-        role=UserRole.ANALYST,
+
+def response_for(user: object) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        created_at=user.created_at,
     )
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already registered.") from None
-    db.refresh(user)
-    return user
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
-    email = str(payload.email).lower()
-    user = db.scalar(select(User).where(User.email == email))
-    if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = create_access_token(str(user.id), str(user.role), settings.jwt_secret)
-    return TokenResponse(access_token=token, user=user)
+@router.post("/profile", response_model=UserResponse)
+def sync_profile(
+    payload: ProfileSyncRequest,
+    current_user: object = Depends(get_current_user),
+) -> UserResponse:
+    user = create_or_update_user(current_user.uid, current_user.email.lower(), payload.displayName.strip())
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account is inactive.")
+    return response_for(user)
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+def get_me(current_user: object = Depends(get_current_user)) -> UserResponse:
+    return response_for(current_user)
 
 
 @router.get("/admin-check")
-def admin_check(current_user: User = Depends(require_roles(UserRole.ADMIN))) -> dict[str, str]:
+def admin_check(current_user: object = Depends(require_roles("ADMIN"))) -> dict[str, str]:
     return {"status": "ok", "role": str(current_user.role)}

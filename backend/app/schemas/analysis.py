@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class AnalysisQueryRequest(BaseModel):
-    dataset_id: int
+    dataset_id: str
     question: str = Field(min_length=3, max_length=1000)
 
 
@@ -25,14 +25,14 @@ class AnalysisQueryResponse(BaseModel):
 
 
 class ChatHistoryMessage(BaseModel):
-    id: int
+    id: str
     role: str
     content: str
     created_at: str
 
 
 class AnalysisHistoryItem(BaseModel):
-    query_id: int
+    query_id: str
     question: str
     sql: str | None
     columns: list[str]

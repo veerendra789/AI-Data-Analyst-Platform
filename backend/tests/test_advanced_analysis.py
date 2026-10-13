@@ -1,36 +1,19 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.api.datasets import settings as dataset_settings
-from app.core.database import get_db
 from app.main import app
-from app.models import Base
-
-ENGINE = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-Session = sessionmaker(bind=ENGINE, autoflush=False, autocommit=False)
+from tests.supabase_test_utils import user_token
 
 @pytest.fixture(autouse=True)
 def database(tmp_path, monkeypatch):
-    Base.metadata.drop_all(ENGINE)
-    Base.metadata.create_all(ENGINE)
     monkeypatch.setattr(dataset_settings, "upload_directory", str(tmp_path))
-    def override():
-        db = Session()
-        try: yield db
-        finally: db.close()
-    app.dependency_overrides[get_db] = override
-    yield
-    app.dependency_overrides.clear()
 
 @pytest.fixture
 def client(): return TestClient(app)
 
 def token(client, email):
-    client.post("/api/auth/register", json={"name":"Advanced", "email":email, "password":"correct-horse-battery"})
-    return client.post("/api/auth/login", json={"email":email, "password":"correct-horse-battery"}).json()["access_token"]
+    return user_token(email)
 
 def upload(client, auth):
     content = b"date,region,category,revenue\n2025-01-01,North,A,100\n2025-02-01,South,B,120\n2025-03-01,North,A,140\n2025-04-01,South,B,160\n2025-05-01,North,A,180\n"

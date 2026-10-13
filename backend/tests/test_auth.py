@@ -1,153 +1,103 @@
 import pytest
-import jwt
-from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlalchemy.orm import sessionmaker
 
-from app.core.database import get_db
+from app.core.supabase import SupabaseUnavailable, get_supabase_client
 from app.main import app
-from app.models import Base
-from app.models import User, UserRole
-from app.core.security import settings
+def token(uid: str) -> str:
+    return f"test-token:{uid}|{uid}@example.com"
 
 
-TEST_ENGINE = create_engine(
-    "sqlite://",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit=False)
+def profile_by_id(supabase_test_services, user_id: str) -> dict:
+    return next(row for row in supabase_test_services.tables["profiles"] if row["id"] == user_id)
 
 
-@pytest.fixture(autouse=True)
-def reset_database():
-    Base.metadata.drop_all(TEST_ENGINE)
-    Base.metadata.create_all(TEST_ENGINE)
-
-    def override_get_db():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def client():
-    return TestClient(app)
-
-
-def registration_payload(email: str = "analyst@example.com"):
-    return {"name": "Test Analyst", "email": email, "password": "correct-horse-battery"}
-
-
-def test_successful_registration(client):
-    response = client.post("/api/auth/register", json=registration_payload())
-
-    assert response.status_code == 201
-    assert response.json()["email"] == "analyst@example.com"
-    assert response.json()["role"] == "ANALYST"
-    assert "password" not in response.json()
-
-
-def test_duplicate_email(client):
-    client.post("/api/auth/register", json=registration_payload())
-
-    response = client.post("/api/auth/register", json=registration_payload("ANALYST@example.com"))
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == "Email is already registered."
-
-
-def test_successful_login(client):
-    client.post("/api/auth/register", json=registration_payload())
-
+def test_profile_sync_creates_uid_document_with_safe_default_role(supabase_test_services):
+    client = TestClient(app)
     response = client.post(
-        "/api/auth/login",
-        json={"email": "analyst@example.com", "password": "correct-horse-battery"},
+        "/api/auth/profile",
+        headers={"Authorization": f"Bearer {token('analyst-uid')}"},
+        json={"displayName": "Analyst User"},
     )
 
     assert response.status_code == 200
-    assert response.json()["token_type"] == "bearer"
-    assert response.json()["access_token"]
-
-
-def test_wrong_password(client):
-    client.post("/api/auth/register", json=registration_payload())
-
-    response = client.post(
-        "/api/auth/login",
-        json={"email": "analyst@example.com", "password": "wrong-password"},
-    )
-
-    assert response.status_code == 401
-
-
-def test_invalid_token(client):
-    response = client.get(
-        "/api/auth/me", headers={"Authorization": "Bearer definitely-not-a-token"}
-    )
-
-    assert response.status_code == 401
-
-
-def test_expired_token(client):
-    token = jwt.encode(
-        {"sub": "1", "role": "ANALYST", "exp": datetime.now(timezone.utc) - timedelta(minutes=1)},
-        settings.jwt_secret,
-        algorithm="HS256",
-    )
-
-    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
-
-    assert response.status_code == 401
-
-
-def test_protected_endpoint_without_authentication(client):
-    response = client.get("/api/auth/me")
-
-    assert response.status_code == 401
-
-
-def test_user_profile_endpoint(client):
-    client.post("/api/auth/register", json=registration_payload())
-    login_response = client.post(
-        "/api/auth/login",
-        json={"email": "analyst@example.com", "password": "correct-horse-battery"},
-    )
-    token = login_response.json()["access_token"]
-
-    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
-
-    assert response.status_code == 200
-    assert response.json()["name"] == "Test Analyst"
+    assert response.json()["id"] == "analyst-uid"
+    assert response.json()["name"] == "Analyst User"
     assert response.json()["role"] == "ANALYST"
+    profile = profile_by_id(supabase_test_services, "analyst-uid")
+    assert profile["id"] == "analyst-uid"
+    assert profile["is_active"] is True
+    assert profile["email"] == "analyst-uid@example.com"
 
 
-def test_role_authorization_for_admin_endpoint(client):
-    analyst_token = client.post("/api/auth/login", json={"email": "missing@example.com", "password": "x"})
-    assert analyst_token.status_code == 401
-    client.post("/api/auth/register", json=registration_payload())
-    analyst_token = client.post(
-        "/api/auth/login", json={"email": "analyst@example.com", "password": "correct-horse-battery"}
-    ).json()["access_token"]
-    assert client.get("/api/auth/admin-check", headers={"Authorization": f"Bearer {analyst_token}"}).status_code == 403
+def test_supabase_client_rejects_unexpected_project(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://another-project.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "placeholder-not-a-secret")
 
-    db = TestingSessionLocal()
-    user = db.get(User, 1)
-    user.role = UserRole.ADMIN
-    db.commit()
-    db.close()
-    admin_token = client.post(
-        "/api/auth/login", json={"email": "analyst@example.com", "password": "correct-horse-battery"}
-    ).json()["access_token"]
-    response = client.get("/api/auth/admin-check", headers={"Authorization": f"Bearer {admin_token}"})
+    with pytest.raises(SupabaseUnavailable, match="SUPABASE_URL must target project azfaieuwnhgjbedfeybl"):
+        get_supabase_client()
+
+
+def test_profile_sync_uses_verified_identity_not_client_uid_or_role(supabase_test_services):
+    response = TestClient(app).post(
+        "/api/auth/profile",
+        headers={"Authorization": f"Bearer {token('verified-uid')}"},
+        json={"displayName": "Verified", "uid": "attacker-uid", "role": "ADMIN"},
+    )
 
     assert response.status_code == 200
-    assert response.json()["role"] == "ADMIN"
+    assert response.json()["id"] == "verified-uid"
+    assert response.json()["role"] == "ANALYST"
+    assert all(row["id"] != "attacker-uid" for row in supabase_test_services.tables["profiles"])
+
+
+def test_profile_sync_is_idempotent_and_preserves_server_role(supabase_test_services):
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token('admin-uid')}"}
+    first = client.post("/api/auth/profile", headers=headers, json={"displayName": "First"})
+    profile_by_id(supabase_test_services, "admin-uid")["role"] = "ADMIN"
+    second = client.post("/api/auth/profile", headers=headers, json={"displayName": "Updated"})
+
+    assert first.status_code == second.status_code == 200
+    assert second.json()["name"] == "Updated"
+    assert second.json()["role"] == "ADMIN"
+
+
+def test_me_requires_verified_token_and_provisions_profile(supabase_test_services):
+    client = TestClient(app)
+    assert client.get("/api/auth/me").status_code == 401
+    assert client.get("/api/auth/me", headers={"Authorization": "Bearer invalid"}).status_code == 401
+    provisioned = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token('provisioned-uid')}"})
+    assert provisioned.status_code == 200
+    assert provisioned.json()["id"] == "provisioned-uid"
+    assert profile_by_id(supabase_test_services, "provisioned-uid")["role"] == "ANALYST"
+
+    client.post(
+        "/api/auth/profile",
+        headers={"Authorization": f"Bearer {token('analyst-uid')}"},
+        json={"displayName": "Analyst"},
+    )
+    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token('analyst-uid')}"})
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "analyst-uid"
+
+
+def test_inactive_profile_is_rejected(supabase_test_services):
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token('inactive-uid')}"}
+    client.post("/api/auth/profile", headers=headers, json={"displayName": "Inactive"})
+    profile_by_id(supabase_test_services, "inactive-uid")["is_active"] = False
+
+    response = client.get("/api/auth/me", headers=headers)
+
+    assert response.status_code == 401
+
+
+def test_admin_role_is_server_controlled(supabase_test_services):
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {token('analyst-uid')}"}
+    client.post("/api/auth/profile", headers=headers, json={"displayName": "Analyst"})
+    assert client.get("/api/auth/admin-check", headers=headers).status_code == 403
+
+    profile_by_id(supabase_test_services, "analyst-uid")["role"] = "ADMIN"
+    assert client.get("/api/auth/admin-check", headers=headers).json()["role"] == "ADMIN"

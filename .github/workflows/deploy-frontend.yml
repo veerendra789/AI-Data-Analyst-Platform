@@ -1,35 +1,38 @@
-name: Deploy frontend to GitHub Pages
+name: Deploy frontend to Firebase Hosting
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "firebase.json"
+      - ".github/workflows/deploy-frontend.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: firebase-hosting-production
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      name: firebase-production
+      url: https://data-analystics-6557e.web.app
     defaults:
       run:
         working-directory: frontend
+    env:
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
@@ -38,20 +41,49 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+      - name: Verify Supabase and API configuration
+        run: |
+          for name in VITE_API_BASE_URL VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "Configure the $name GitHub Actions variable before deploying."
+              exit 1
+            fi
+          done
+          case "$VITE_API_BASE_URL" in https://*) ;; *) echo "VITE_API_BASE_URL must use HTTPS."; exit 1 ;; esac
+          health="$(curl --fail --silent --show-error "${VITE_API_BASE_URL%/}/health/db")"
+          printf '%s' "$health" | grep -Fq '"database":"supabase"' || {
+            echo "The configured API did not report healthy Supabase access."
+            exit 1
+          }
+          for origin in https://data-analystics-6557e.web.app https://data-analysis.veerendra.tech; do
+            headers="$(curl --silent --show-error --fail --output /dev/null --dump-header - \
+              -X OPTIONS "${VITE_API_BASE_URL%/}/api/auth/profile" \
+              -H "Origin: $origin" \
+              -H 'Access-Control-Request-Method: POST' \
+              -H 'Access-Control-Request-Headers: authorization,content-type')"
+            printf '%s\n' "$headers" | grep -Fqi "access-control-allow-origin: $origin" || {
+              echo "The API CORS policy does not allow $origin."
+              exit 1
+            }
+          done
+
+      - name: Run frontend tests
+        run: npm run test -- --pool=threads --maxWorkers=1
+
+      - name: Lint frontend
+        run: npm run lint
 
       - name: Build frontend
         run: npm run build
 
-      - name: Add SPA fallback
-        run: cp dist/index.html dist/404.html
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Authenticate to Firebase
+        uses: google-github-actions/auth@v2
         with:
-          path: frontend/dist
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Deploy Firebase Hosting
+        working-directory: .
+        run: firebase deploy --only hosting --project data-analystics-6557e --non-interactive

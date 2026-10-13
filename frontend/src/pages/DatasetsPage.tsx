@@ -1,7 +1,9 @@
+import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Database, FileUp, Home, LoaderCircle, Trash2 } from "lucide-react";
 import api from "../services/api";
+import { uploadCsvThroughStorage } from "../services/supabaseStorageUpload";
 import type { Dataset, DatasetListResponse } from "../types/datasets";
 
 function formatBytes(bytes: number) { return `${(bytes / 1024).toFixed(1)} KB`; }
@@ -21,13 +23,15 @@ export default function DatasetsPage() {
   const upload = async (file: File) => {
     setError("");
     setUploadProgress(0);
-    const formData = new FormData();
-    formData.append("file", file);
     try {
-      await api.post("/api/datasets/upload", formData, { headers: { "Content-Type": "multipart/form-data" }, onUploadProgress: (event) => { if (event.total) setUploadProgress(Math.round((event.loaded / event.total) * 100)); } });
+      await uploadCsvThroughStorage<Dataset>("/api/datasets/upload", file, setUploadProgress);
       await loadDatasets();
-    } catch (uploadError: any) {
-      setError(uploadError.response?.data?.detail ?? "The dataset could not be uploaded.");
+    } catch (uploadError: unknown) {
+      setError(
+        axios.isAxiosError(uploadError)
+          ? uploadError.response?.data?.detail ?? "The dataset could not be uploaded."
+          : uploadError instanceof Error ? uploadError.message : "The dataset could not be uploaded.",
+      );
     } finally { setUploadProgress(null); if (inputRef.current) inputRef.current.value = ""; }
   };
 

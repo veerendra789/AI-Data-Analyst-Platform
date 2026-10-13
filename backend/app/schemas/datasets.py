@@ -17,7 +17,7 @@ class DatasetColumnResponse(BaseModel):
 class DatasetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: str
     name: str
     original_filename: str
     row_count: int
@@ -36,7 +36,7 @@ class DatasetListResponse(BaseModel):
 
 
 class DatasetPreviewResponse(BaseModel):
-    dataset_id: int
+    dataset_id: str
     columns: list[str]
     rows: list[dict[str, str | None]]
     total_rows: int

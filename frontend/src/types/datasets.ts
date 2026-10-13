@@ -8,7 +8,7 @@ export type DatasetColumn = {
 };
 
 export type Dataset = {
-  id: number;
+  id: string;
   name: string;
   original_filename: string;
   row_count: number;
@@ -22,4 +22,4 @@ export type Dataset = {
 };
 
 export type DatasetListResponse = { items: Dataset[]; total: number };
-export type DatasetPreview = { dataset_id: number; columns: string[]; rows: Record<string, string | null>[]; total_rows: number; returned_rows: number };
+export type DatasetPreview = { dataset_id: string; columns: string[]; rows: Record<string, string | null>[]; total_rows: number; returned_rows: number };

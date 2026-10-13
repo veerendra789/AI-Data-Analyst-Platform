@@ -3,37 +3,16 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.api.datasets import settings as dataset_settings
-from app.core.database import get_db
 from app.main import app
-from app.models import Base
 from app.services.profiling_service import ProfilingError, detect_anomalies, profile_dataframe
-
-
-TEST_ENGINE = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit=False)
+from tests.supabase_test_utils import user_token
 
 
 @pytest.fixture(autouse=True)
 def reset_database(tmp_path, monkeypatch):
-    Base.metadata.drop_all(TEST_ENGINE)
-    Base.metadata.create_all(TEST_ENGINE)
     monkeypatch.setattr(dataset_settings, "upload_directory", str(tmp_path))
-
-    def override_get_db():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -42,8 +21,7 @@ def client():
 
 
 def token_for(client: TestClient, email: str) -> str:
-    client.post("/api/auth/register", json={"name": "Profiler", "email": email, "password": "correct-horse-battery"})
-    return client.post("/api/auth/login", json={"email": email, "password": "correct-horse-battery"}).json()["access_token"]
+    return user_token(email)
 
 
 def upload(client: TestClient, token: str, content: bytes) -> int:

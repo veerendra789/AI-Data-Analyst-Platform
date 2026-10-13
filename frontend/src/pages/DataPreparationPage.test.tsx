@@ -2,10 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import api from "../services/api";
+import { uploadCsvThroughStorage } from "../services/supabaseStorageUpload";
 import DataPreparationPage from "./DataPreparationPage";
 import type { PreparationSession } from "../types/dataPreparation";
 
 vi.mock("../services/api", () => ({ default: { post: vi.fn(), get: vi.fn() } }));
+vi.mock("../services/supabaseStorageUpload", () => ({ uploadCsvThroughStorage: vi.fn() }));
 
 const analyzedSession: PreparationSession = {
   id: "prep-1",
@@ -35,7 +37,8 @@ describe("DataPreparationPage", () => {
   beforeEach(() => vi.resetAllMocks());
 
   it("uploads, reviews, applies, previews, downloads, and saves a prepared dataset", async () => {
-    vi.mocked(api.post).mockResolvedValueOnce({ data: analyzedSession }).mockResolvedValueOnce({ data: appliedSession }).mockResolvedValueOnce({ data: { id: 7, name: "raw cleaned" } });
+    vi.mocked(uploadCsvThroughStorage).mockResolvedValueOnce(analyzedSession);
+    vi.mocked(api.post).mockResolvedValueOnce({ data: appliedSession }).mockResolvedValueOnce({ data: { id: "dataset-1", name: "raw cleaned" } });
     vi.mocked(api.get).mockResolvedValue({ data: new Blob(["customer_id,revenue\n0012,1200"]), headers: {} });
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:prepared") });
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
@@ -61,7 +64,7 @@ describe("DataPreparationPage", () => {
   });
 
   it("shows understandable analysis errors", async () => {
-    vi.mocked(api.post).mockRejectedValueOnce({ response: { data: { detail: "Only CSV files are supported." } } });
+    vi.mocked(uploadCsvThroughStorage).mockRejectedValueOnce({ response: { data: { detail: "Only CSV files are supported." } } });
     renderPage();
     fireEvent.change(screen.getByLabelText("Choose a CSV file"), { target: { files: [new File(["x"], "raw.txt")] } });
     fireEvent.click(screen.getByRole("button", { name: /analyze dataset/i }));

@@ -1,7 +1,10 @@
-from fastapi import FastAPI, HTTPException, Request
+import logging
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.api.auth import router as auth_router
@@ -9,12 +12,26 @@ from app.api.datasets import router as datasets_router
 from app.api.analysis import router as analysis_router
 from app.api.reports import router as reports_router
 from app.api.data_preparation import router as data_preparation_router
+from app.services.supabase_repository import check_database
+
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
+    app_env: str = "development"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def validate_production_cors(self) -> "Settings":
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if self.app_env.lower() in {"production", "prod"} and (
+            not origins or "*" in origins or any(not origin.startswith("https://") for origin in origins)
+        ):
+            raise ValueError("Production CORS_ORIGINS must contain only explicit HTTPS origins.")
+        return self
 
 
 settings = Settings()
@@ -26,7 +43,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in settings.cors_origins.split(",")],
+    allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
@@ -65,14 +82,25 @@ async def validation_error_handler(_: Request, __: RequestValidationError) -> JS
 
 @app.exception_handler(Exception)
 async def unexpected_error_handler(_: Request, __: Exception) -> JSONResponse:
+    logger.exception("Unhandled API exception")
     return error_response(500, "The request could not be completed.", "INTERNAL_ERROR")
 
 
 @app.get("/health", tags=["system"])
 def health_check() -> dict[str, str]:
-    return {"status": "ok", "service": "backend"}
+    return {"status": "ok"}
 
 
 @app.get("/api/health", tags=["system"])
 def api_health_check() -> dict[str, str]:
     return {"status": "ok", "service": "api"}
+
+
+@app.get("/health/db", tags=["system"], response_model=None)
+def database_health_check() -> JSONResponse | dict[str, str]:
+    try:
+        check_database()
+        return {"status": "ok", "database": "supabase"}
+    except Exception:
+        logger.exception("Supabase database health check failed")
+        return JSONResponse(status_code=503, content={"status": "error", "database": "unavailable"})

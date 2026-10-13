@@ -1,20 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ai_data_analyst}
-      POSTGRES_USER: ${POSTGRES_USER:-analyst}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U analyst -d ai_data_analyst"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   redis:
     image: redis:7-alpine
     ports:
@@ -28,26 +12,21 @@ services:
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-analyst}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-ai_data_analyst}
       APP_ENV: ${APP_ENV:-development}
       REDIS_URL: ${REDIS_URL:?Set REDIS_URL in .env}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      SUPABASE_URL: ${SUPABASE_URL:-https://azfaieuwnhgjbedfeybl.supabase.co}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       LLM_PROVIDER: ${LLM_PROVIDER:-development}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
-      UPLOAD_DIRECTORY: ${UPLOAD_DIRECTORY:-/app/data/uploads}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,https://data-analystics-6557e.web.app,https://data-analystics-6557e.firebaseapp.com,https://data-analysis.veerendra.tech}
+      UPLOAD_DIRECTORY: ${UPLOAD_DIRECTORY:-/tmp/ai-data-analyst/uploads}
       MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-52428800}
       QUERY_TIMEOUT_SECONDS: ${QUERY_TIMEOUT_SECONDS:-10}
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend/app:/app/app
-      - ./data:/app/data
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -60,7 +39,9 @@ services:
     build: ./frontend
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://azfaieuwnhgjbedfeybl.supabase.co}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-}
     ports:
       - "5173:5173"
     volumes:
@@ -71,5 +52,4 @@ services:
         condition: service_healthy
 
 volumes:
-  postgres_data:
   frontend_node_modules:

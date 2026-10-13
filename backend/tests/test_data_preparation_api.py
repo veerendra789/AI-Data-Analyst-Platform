@@ -1,54 +1,30 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.api.data_preparation import settings as dataset_settings
-from app.core.database import get_db
+from app.services.dataset_service import settings as dataset_settings
 from app.main import app
-from app.models import Base
-
-
-ENGINE = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-Session = sessionmaker(bind=ENGINE, autoflush=False, autocommit=False)
+from tests.supabase_test_utils import user_token
 
 
 def setup_function():
-    Base.metadata.drop_all(ENGINE)
-    Base.metadata.create_all(ENGINE)
     dataset_settings.upload_directory = ""
-
-
-def teardown_function():
-    app.dependency_overrides.clear()
 
 
 def make_client(tmp_path):
     dataset_settings.upload_directory = str(tmp_path)
-
-    def override_get_db():
-        db = Session()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
     return TestClient(app)
 
 
 def token_for(client: TestClient, email: str) -> str:
-    client.post("/api/auth/register", json={"name": "Prep User", "email": email, "password": "correct-horse-battery"})
-    return client.post("/api/auth/login", json={"email": email, "password": "correct-horse-battery"}).json()["access_token"]
+    return user_token(email)
 
 
 def raw_csv():
     return {"file": ("kaggle raw.csv", b"Customer ID,Revenue,Gender,Date\n0012,\"$1,200\",Male,2025-01-01\n0012,\"$1,200\",Male,2025-01-01\n0003,500,male,03/04/2025\n", "text/csv")}
 
 
-def test_complete_preparation_to_dataset_workflow(tmp_path):
+def test_complete_preparation_to_dataset_workflow(tmp_path, supabase_test_services):
     client = make_client(tmp_path)
     token = token_for(client, "prep-owner@example.com")
     headers = {"Authorization": f"Bearer {token}"}
@@ -82,9 +58,40 @@ def test_complete_preparation_to_dataset_workflow(tmp_path):
     assert client.get(f"/api/datasets/{dataset['id']}", headers=headers).status_code == 200
     assert client.get(f"/api/datasets/{dataset['id']}/preview", headers=headers).json()["total_rows"] == 2
 
-    original_files = list(Path(tmp_path).glob("*.csv"))
-    assert len(original_files) == 1
-    assert b"Customer ID" in original_files[0].read_bytes()
+    source_objects = [
+        content
+        for path, content in supabase_test_services.objects.items()
+        if path.endswith("/source.csv")
+    ]
+    assert len(source_objects) == 1
+    assert b"Customer ID" in source_objects[0]
+    assert b"customer_id" not in source_objects[0]
+
+
+def test_direct_storage_upload_analyzes_and_persists_preparation(tmp_path, supabase_test_services):
+    client = make_client(tmp_path)
+    token = token_for(client, "direct-prep-owner@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    filename, content, content_type = raw_csv()["file"]
+    initialized = client.post(
+        "/api/data-preparation/upload/init",
+        json={"filename": filename, "content_type": content_type, "file_size": len(content)},
+        headers=headers,
+    )
+    assert initialized.status_code == 201
+    upload = initialized.json()
+    supabase_test_services.objects[upload["storage_path"]] = content
+
+    completed = client.post(
+        "/api/data-preparation/upload/complete",
+        json={"preparation_id": upload["preparation_id"]},
+        headers=headers,
+    )
+
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["overview"]["duplicate_rows"] == 1
+    assert completed.json()["filename"] == filename
+    assert upload["storage_path"].startswith("structuringjobs/")
 
 
 def test_preparation_is_owner_scoped_and_requires_auth(tmp_path):

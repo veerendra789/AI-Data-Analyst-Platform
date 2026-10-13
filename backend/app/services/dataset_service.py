@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DatasetSettings(BaseSettings):
-    upload_directory: str = "data/uploads"
+    upload_directory: str = "/tmp/ai-data-analyst/uploads"
     max_upload_size: int = 50 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

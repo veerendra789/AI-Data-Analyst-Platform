@@ -4,15 +4,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReportGenerateRequest(BaseModel):
-    dataset_id: int
+    dataset_id: str
     title: str = Field(default="Analytical report", min_length=1, max_length=255)
 
 
 class ReportResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    dataset_id: int
+    id: str
+    dataset_id: str
     title: str
     content: str
     created_at: datetime

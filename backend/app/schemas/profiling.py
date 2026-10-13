@@ -24,7 +24,7 @@ class ProfileSummary(BaseModel):
 
 
 class DatasetProfileResponse(BaseModel):
-    dataset_id: int
+    dataset_id: str
     summary: ProfileSummary
     columns: list[ProfileColumn]
     numeric_statistics: dict[str, dict[str, float | None]]
@@ -40,7 +40,7 @@ class AnomalyRequest(BaseModel):
 
 
 class AnomalyResponse(BaseModel):
-    dataset_id: int
+    dataset_id: str
     column: str
     number_of_anomalies: int
     anomaly_records: list[dict[str, Any]]
